@@ -1,0 +1,71 @@
+//输入为：左右图sobel图像以及census变换图像的指针：leftSobelRow, leftCensusRow, rightSobelRow, rightCensusRow, 还有指向leftCostImage_的指针：costImageRow，最后的结果保存在这里面
+                  //里面调用SAD，Hamming，HalfPixel三个函数
+//输出：指针costImageRow指向的地址leftCostImage_中的第一行
+
+void SGMStereo::calcTopRowCost(unsigned char*& leftSobelRow, int*& leftCensusRow,
+	unsigned char*& rightSobelRow, int*& rightCensusRow,
+	unsigned short* costImageRow)
+{
+	/* aggregationWindowRadius_ 的缺省值为 2 , 聚合窗口半径 */
+	for (int rowIndex = 0; rowIndex <= aggregationWindowRadius_; ++rowIndex)
+	{
+		//为什么模除以(2*2+2)？因为rowAggregatedCost_的size是宽*d*(2*2+2)，rowAggregatedCostCurrent不能超过最大size
+		int rowAggregatedCostIndex = std::min(rowIndex, height_ - 1) % (aggregationWindowRadius_ * 2 + 2);
+
+		// int rowAggregatedCostBufferSize = width_*disparityTotal_*(aggregationWindowRadius_*2 + 2);
+		// rowAggregatedCost_ = reinterpret_cast<unsigned short*>(_mm_malloc(rowAggregatedCostBufferSize*sizeof(unsigned short), 16));
+		// rowAggregatedCost_ 该存储空间是临时存储空间,而且是循环使用的
+		unsigned short* rowAggregatedCostCurrent = rowAggregatedCost_ + rowAggregatedCostIndex*width_*disparityTotal_;
+
+		/* 计算结果都保存在 pixelwiseCostRow_ 中, 缓冲区的大小为：width_*disparityTotal_，类型为 unsigned char */
+		/* SAD 值计算，这里的 SAD 值是 sobel 计算得到的图像 */
+		/* 这里以 sobel 图像为输入进行计算 */
+		//SAD是衡量Matching cost的一种方法
+		calcPixelwiseSAD(leftSobelRow, rightSobelRow);
+
+		/* 计算海明距离，这和上面的 SAD 值是累加关系 */
+		/*  , 知道 cost 值的存放顺序 */
+		addPixelwiseHamming(leftCensusRow, rightCensusRow);
+
+		memset(rowAggregatedCostCurrent, 0, disparityTotal_*sizeof(unsigned short));
+
+		// x = 0
+		/* aggregationWindowRadius_ 的缺省值为 2 , 聚合窗口半径 */
+		for (int x = 0; x <= aggregationWindowRadius_; ++x)
+		{
+			int scale = x == 0 ? aggregationWindowRadius_ + 1 : 1;
+			for (int d = 0; d < disparityTotal_; ++d)
+			{
+				rowAggregatedCostCurrent[d] += static_cast<unsigned short>(pixelwiseCostRow_[disparityTotal_*x + d] * scale);
+			}
+		}
+
+		// x = 1...width-1聚合的过程，min和max是控制边缘的
+		/* 相当于是一个平滑滤波器, boxfilter */
+		for (int x = 1; x < width_; ++x)
+		{
+			const unsigned char* addPixelwiseCost = pixelwiseCostRow_ + std::min((x + aggregationWindowRadius_)*disparityTotal_, (width_ - 1)*disparityTotal_);
+			const unsigned char* subPixelwiseCost = pixelwiseCostRow_ + std::max((x - aggregationWindowRadius_ - 1)*disparityTotal_, 0);
+
+			for (int d = 0; d < disparityTotal_; ++d)
+			{
+				rowAggregatedCostCurrent[disparityTotal_*x + d]
+					= static_cast<unsigned short>(rowAggregatedCostCurrent[disparityTotal_*(x - 1) + d] + addPixelwiseCost[d] - subPixelwiseCost[d]);
+			}
+		}
+
+		// Add to cost, cost 值进行累加操作
+		int scale = rowIndex == 0 ? aggregationWindowRadius_ + 1 : 1;
+		for (int i = 0; i < width_*disparityTotal_; ++i)
+		{
+			costImageRow[i] += rowAggregatedCostCurrent[i] * scale;
+		}
+
+		/* 移动数据指针 */
+		leftSobelRow += widthStep_;
+		rightSobelRow += widthStep_;
+		leftCensusRow += width_;
+		rightCensusRow += width_;
+
+	} // for (int rowIndex = 0; rowIndex <= aggregationWindowRadius_; ++rowIndex)
+}
