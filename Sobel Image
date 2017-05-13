@@ -1,0 +1,24 @@
+//输入为：leftGrayscaleImage，false（左图），存储空间leftSobelImage
+//输出为：填充以后的leftSobelImage
+//同理rightSobelIamge也这样得到，但是中间的参数是true，差别就是结果的存放顺序不一样
+void SGMStereo::computeCappedSobelImage(const unsigned char* image, const bool horizontalFlip, unsigned char* sobelImage) const
+{
+	memset(sobelImage, sobelCapValue_, widthStep_ * height_);
+	if(horizontalFlip)
+	{
+		for(int y = 1; y < height_ - 1; y++)
+		{
+			for(int x = 1; x < width_ - 1; x++)
+			{
+				int sobelValue = (image[width_*(y - 1) + x + 1] + 2 * image[width_*y + x + 1] + image[width_*(y + 1) + x + 1]) - (image[width_*(y - 1) + x - 1] + 2 * image[width_*y + x - 1] + image[width_*(y + 1) + x - 1]);
+				if(sobelValue > sobelCapValue_)
+					sobelValue = 2 * sobelCapValue_;
+				else if(sobelValue < -sobelCapValue_)
+					sobelValue = 0;
+				else
+					sobelValue += sobelCapValue_;
+				sobelImage[widthStep_ * y + x] = sobelValue;
+			}
+		}
+	}
+}
