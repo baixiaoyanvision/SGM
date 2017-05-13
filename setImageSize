@@ -1,0 +1,15 @@
+void SGMStereo::setImageSize(const png::image<png::rgb_pixel>& leftImage, const png::image<png::rgb_pixel>& rightImage)
+{
+	width_ = static_cast<int>(leftImage.get_width());
+	height_ = static_cast<int>(leftImage.get_height());
+
+	if (rightImage.get_width() != width_ || rightImage.get_height() != height_)
+	{
+		throw std::invalid_argument("[SGMStereo::setImageSize] sizes of left and right images are different");
+	}
+
+	/* 图像的宽度必须为 16 的整数倍 */
+	//widthStep_ = width_ + 15 - (width_ - 1) % 16;
+	//宽度不一定必须是16的整数倍吧，只有在有关sobel图像时才用到上面这个widthStep_，但是修改以后也可以运行通过的
+	widthStep_ = width_;
+}
