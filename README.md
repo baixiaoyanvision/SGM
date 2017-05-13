@@ -1,5 +1,6 @@
 # SGM
-An implementation of SGM algorithm
+the major function of the SGM algorithm
+Each file is the implementation of the corresponding function
 
 /*This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
