@@ -1,0 +1,58 @@
+//输入：左图视差图leftDisparityImage和右图视差图rightDisparityImage
+//输出：leftDisparityImage和rightDisparityImage
+void SGMStereo::enforceLeftRightConsistency(unsigned short* leftDisparityImage, unsigned short* rightDisparityImage) const
+{
+	// Check left disparity image
+	for (int y = 0; y < height_; ++y)
+	{
+		for (int x = 0; x < width_; ++x)
+		{
+			if (leftDisparityImage[width_*y + x] == 0) continue;
+
+			/* 左图像素的视差 */
+			int leftDisparityValue = static_cast<int>(static_cast<double>(leftDisparityImage[width_*y + x]) / disparityFactor_ + 0.5);
+
+			if (x - leftDisparityValue < 0)
+			{
+				leftDisparityImage[width_*y + x] = 0;
+				continue;
+			}
+//          std::cout << rightDisparityImage[width_*y + 250] << "    ";
+			/* 得到右图对应像素的视差 */
+			//举例说明：左图位置为5的点，它的视差leftDisparityValue计算出来为2，那么右图的对应点应该在-2位置上，所以就右图的位置-2，那才应该是和左图刚好对应的点
+			int rightDisparityValue = static_cast<int>(static_cast<double>(rightDisparityImage[width_*y + x - leftDisparityValue]) / disparityFactor_ + 0.5);
+
+			/* 如果相差太大，则直接置为零 */
+			if (rightDisparityValue == 0 || abs(leftDisparityValue - rightDisparityValue) > consistencyThreshold_)
+			{
+				leftDisparityImage[width_*y + x] = 0;
+			}
+		}
+	}
+
+	// Check right disparity image
+	for (int y = 0; y < height_; ++y)
+	{
+		for (int x = 0; x < width_; ++x)
+		{
+			if (rightDisparityImage[width_*y + x] == 0)  continue;
+
+			/* 右图像素的视差 */
+			int rightDisparityValue = static_cast<int>(static_cast<double>(rightDisparityImage[width_*y + x]) / disparityFactor_ + 0.5);
+
+			if (x + rightDisparityValue >= width_)
+			{
+				rightDisparityImage[width_*y + x] = 0;
+				continue;
+			}
+
+			int leftDisparityValue = static_cast<int>(static_cast<double>(leftDisparityImage[width_*y + x + rightDisparityValue]) / disparityFactor_ + 0.5);
+
+			/* 如果相差太大，则直接置为零 */
+			if (leftDisparityValue == 0 || abs(rightDisparityValue - leftDisparityValue) > consistencyThreshold_)
+			{
+				rightDisparityImage[width_*y + x] = 0;
+			}
+		}
+	}
+}
