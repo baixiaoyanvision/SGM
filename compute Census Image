@@ -1,0 +1,32 @@
+//输入为：leftGrayscaleImage和存储空间leftCensusImage    censusWindowRadius_=2
+//输出为：填充以后的leftCensusImage
+//右图同理
+
+void SGMStereo::computeCensusImage(const unsigned char* image, int* censusImage) const
+{
+	for (int y = 0; y < height_; ++y)
+	{
+		for (int x = 0; x < width_; ++x)
+		{
+			/* 当前像素的值 */
+			unsigned char centerValue = image[width_*y + x];
+
+			int censusCode = 0;
+			//5*5的区域
+			for (int offsetY = -censusWindowRadius_; offsetY <= censusWindowRadius_; ++offsetY)
+			{
+				for (int offsetX = -censusWindowRadius_; offsetX <= censusWindowRadius_; ++offsetX)
+				{
+					censusCode = censusCode << 1;
+
+					/* 包含了边缘检测部分 */
+					//这部分一直循环25次，如果每次都进入if语句，然后再进行右移，得到的censusCode值可能会很大
+					if (y + offsetY >= 0 && y + offsetY < height_ && x + offsetX >= 0 && x + offsetX < width_
+						&& image[width_*(y + offsetY) + x + offsetX] >= centerValue)
+						censusCode += 1;
+				}
+			}
+			censusImage[width_*y + x] = censusCode;
+		}
+	}
+}
