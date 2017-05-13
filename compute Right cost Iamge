@@ -1,0 +1,65 @@
+//输出：填充了 rightCostImage_
+void SGMStereo::computeRightCostImage()
+{
+	const int widthStepCost = width_*disparityTotal_;
+	/*左图：x   x   x   x   x   x   x   x
+	 右图：x-7 x-6 x-5 x-4 x-3 x-2 x-1  x（右图右移）
+	在计算左图的cost值时，左图的一个x对应右图的256个x-..
+
+	当计算右图的cost值时，应该是右图的一个x对应左图的256个x+..
+	左图：x  x+1 x+2 x+3 x+4 x+5 x+6 x+7（左图左移）
+	右图：x   x   x   x   x   x   x   x
+	所以在计算右图的cost值时，先把左右的x对齐，leftCostPointer++后，相当于计算右图x-1的cost值，
+应该和右图x的cost值位置相差255，所以减去255
+	*/
+
+	/* 行循环 */
+	for (int y = 0; y < height_; ++y)
+	{
+		unsigned short* leftCostRow = leftCostImage_ + widthStepCost*y;
+		unsigned short* rightCostRow = rightCostImage_ + widthStepCost*y;
+		//填充的是右图的0-255个x的cost值。只有x=0的填满了，其他的x=？就差？个没有填
+		for (int x = 0; x < disparityTotal_; ++x)
+		{
+			unsigned short* leftCostPointer = leftCostRow + disparityTotal_*x;
+			unsigned short* rightCostPointer = rightCostRow + disparityTotal_*x;
+
+			for (int d = 0; d <= x; ++d)
+			{
+				*(rightCostPointer) = *(leftCostPointer);
+				rightCostPointer -= disparityTotal_ - 1;
+				++leftCostPointer;
+			}
+		}
+		/* 列循环 */
+		//还是在往前填充，最后x=449时，右图的前194个x的所有cost层就会都填满了，
+		//但是从x=195开始，x=？就差(x-194)个cost未填充
+		for (int x = disparityTotal_; x < width_; ++x)
+		{
+			unsigned short* leftCostPointer = leftCostRow + disparityTotal_*x;
+			unsigned short* rightCostPointer = rightCostRow + disparityTotal_*x;
+
+			for (int d = 0; d < disparityTotal_; ++d)
+			{
+				*(rightCostPointer) = *(leftCostPointer);
+				rightCostPointer -= disparityTotal_ - 1;
+				++leftCostPointer;
+			}
+		}
+		//这里是直接填充的右图cost，填充x=195的第255个cost，x=196的第254和255个cost，..,x=449的第1,2,3，..,255个cost
+		//其实是每个x的最后一个cost值往后填充，一直填充到cost层=255
+		for (int x = width_ - disparityTotal_ + 1; x < width_; ++x)
+		{
+			int maxDisparityIndex = width_ - x;
+			unsigned short lastValue = *(rightCostRow + disparityTotal_*x + maxDisparityIndex - 1);
+
+			unsigned short* rightCostPointer = rightCostRow + disparityTotal_*x + maxDisparityIndex;
+
+			for (int d = maxDisparityIndex; d < disparityTotal_; ++d)
+			{
+				*(rightCostPointer) = lastValue;
+				++rightCostPointer;
+			}
+		}
+	}
+}
