@@ -1,0 +1,70 @@
+//输入：左右sobel图像的指针，leftSobelRow和rightSobelRow
+//输出：计算结果都保存在 pixelwiseCostRow_ 中，是最终cost值的一部分
+void SGMStereo::calcPixelwiseSAD(const unsigned char* leftSobelRow, const unsigned char* rightSobelRow)
+{
+	calcHalfPixelRight(rightSobelRow);
+	
+	for(int x = 0; x < disparityTotal_; x++)
+	{
+		int leftCenterValue = leftSobelRow[x];
+		int leftHalfLeftValue = x > 0 ? (leftSobelRow[x] + leftSobelRow[x - 1]) / 2 : leftCenterValue;
+		int leftHalfRightValue = x < width_ - 1 ? (leftSobelRow[x] + leftSobelRow[x + 1]) / 2 : leftCenterValue;
+		
+		int LeftMinValue = std::min(leftCenterValue, leftHalfLeftValue);
+		LeftMinValue = std::min(LeftMinValue, leftHalfRightValue);
+		
+		int LeftMaxValue = std::max(leftCenterValue, leftHalfLeftValue);
+		LeftMaxValue = std::max(LeftMaxValue, leftHalfRightValue);
+		
+		for(int d = 0; d <= x; d++)
+		{
+			int rightCenterValue = rightSobelRow[x - d];
+			int RightMinValue = halfPixelRightMin_[x - d];
+			int RightMaxValue = halfPixelRightMax_[x - d];
+			
+			int costLtoR = std::max(0, leftCenterValue - RightMaxValue);
+			costLtoR = std::max(costLtoR, RightMinValue - leftCenterValue);
+			
+			int costRtoL = std::max(0, rightCenterValue - LeftMaxValue);
+			costRtoL = std::max(costRtoL, LeftMinValue - rightCenterValue);
+			
+			int costValue = std::min(costLtoR, costRtoL);
+			
+			pixelwiseCostRow_[disparityTotal_ * x + d] = costValue;
+		}
+		for(int d = x + 1; d < disparityTotal_; d++)
+		{
+			pixelwiseCostRow_[disparityTotal_ * x + d] = pixelwiseCostRow_[disparityTotal_ * x + d - 1];
+		}
+	}
+	
+	for(int x = disparityTotal_; x < width_; x++)
+	{
+		int leftCenterValue = leftSobelRow[x];
+		int leftHalfLeftValue = x > 0 ? (leftSobelRow[x] + leftSobelRow[x - 1]) / 2 : leftCenterValue;
+		int leftHalfRightValue = x < width_ - 1 ? (leftSobelRow[x] + leftSobelRow[x + 1]) / 2 : leftCenterValue;
+		
+		int LeftMinValue = std::min(leftCenterValue, leftHalfLeftValue);
+		LeftMinValue = std::min(LeftMinValue, leftHalfRightValue);
+		
+		int LeftMaxValue = std::max(leftCenterValue, leftHalfLeftValue);
+		LeftMaxValue = std::max(LeftMaxValue, leftHalfRightValue);
+		
+		for(int d = 0; d < disparityTotal_; d++)
+		{
+			int rightCenterValue = rightSobelRow[x - d];
+			int RightMinValue = halfPixelRightMin_[x - d];
+			int RightMaxValue = halfPixelRightMax_[x - d];
+			
+			int costLtoR = std::max(0, leftCenterValue - RightMaxValue);
+			costLtoR = std::max(costLtoR, RightMinValue - leftCenterValue);
+			
+			int costRtoL = std::max(0, rightCenterValue - LeftMaxValue);
+			costRtoL = std::max(costRtoL, LeftMinValue - rightCenterValue);
+			
+			int costValue = std::min(costLtoR, costRtoL);
+			
+			pixelwiseCostRow_[disparityTotal_ * x + d] = costValue;
+		}
+	}
+}
