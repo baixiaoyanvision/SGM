@@ -1,0 +1,38 @@
+//分配缓冲区，以便后续使用
+void SGMStereo::allocateDataBuffer()
+{
+	/* reinterpret_cast是C++里的强制类型转换符 */
+	/* 用于保存 Cost 值 */
+	//_mm_malloc：在指定的对齐边界上分配内存。a=请求的内存分配的大小，b=对齐值，必须是2的整数次幂
+	leftCostImage_ = reinterpret_cast<unsigned short*>(_mm_malloc(width_*height_*disparityTotal_*sizeof(unsigned short), 16));
+	rightCostImage_ = reinterpret_cast<unsigned short*>(_mm_malloc(width_*height_*disparityTotal_*sizeof(unsigned short), 16));
+
+	/* 相当于一行的偏移量 */
+	int pixelwiseCostRowBufferSize = width_*disparityTotal_;
+	//这个是为了做聚合，横向和纵向都是6，所以是2*2+2
+	int rowAggregatedCostBufferSize = width_*disparityTotal_*(aggregationWindowRadius_ * 2 + 2);
+	int halfPixelRightBufferSize = widthStep_; /* 图像宽度 */
+
+	pixelwiseCostRow_ = reinterpret_cast<unsigned char*>(_mm_malloc(pixelwiseCostRowBufferSize*sizeof(unsigned char), 16));
+	rowAggregatedCost_ = reinterpret_cast<unsigned short*>(_mm_malloc(rowAggregatedCostBufferSize*sizeof(unsigned short), 16));
+	halfPixelRightMin_ = reinterpret_cast<unsigned char*>(_mm_malloc(halfPixelRightBufferSize*sizeof(unsigned char), 16));
+	halfPixelRightMax_ = reinterpret_cast<unsigned char*>(_mm_malloc(halfPixelRightBufferSize*sizeof(unsigned char), 16));
+//以上部分用于聚合
+
+//以下部分用于SGM
+	pathRowBufferTotal_ = 2;
+	disparitySize_ = disparityTotal_;
+	pathTotal_ = 8;
+	pathDisparitySize_ = pathTotal_*disparitySize_;
+
+	costSumBufferRowSize_ = width_*disparityTotal_;
+	costSumBufferSize_ = costSumBufferRowSize_*height_;
+	pathMinCostBufferSize_ = (width_ +2) * pathTotal_;
+	//这里加 2 是后面存储的时候延后了 2 个 pathTotal_* disparitySize_
+	//在后面进行计算pathCosts[]以及pathMinCosts[]时，需要用到8*2个空间来存储
+	pathCostBufferSize_ = pathMinCostBufferSize_*disparitySize_;
+	totalBufferSize_ = (pathMinCostBufferSize_ + pathCostBufferSize_)*pathRowBufferTotal_ + costSumBufferSize_ + 16;//也可以+8，而不是+16,但没什么区别
+
+	/* 其他内存需求 */
+	sgmBuffer_ = reinterpret_cast<short*>(_mm_malloc(totalBufferSize_*sizeof(short), 16));
+}
