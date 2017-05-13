@@ -1,0 +1,64 @@
+//输入为：左右图sobel图像以及census变换图像的指针：leftSobelRow, leftCensusRow, rightSobelRow, rightCensusRow, 还有指向leftCostImage_的指针：costImageRow，最后的结果保存在这里面
+                  //里面调用SAD，Hamming，HalfPixel三个函数
+//输出：指针costImageRow指向的地址leftCostImage_中
+
+void SGMStereo::calcRowCosts(unsigned char*& leftSobelRow, int*& leftCensusRow,
+	unsigned char*& rightSobelRow, int*& rightCensusRow,
+	unsigned short* costImageRow)
+	{
+		const int widthStepCost = width_ * disparityTotal_;
+		
+		for(int y = 1; y < height_; y++)
+		{
+			int addRowIndex = y + aggregationWindowRadius_;
+			int addRowAggregatedCostIndex = std::min(addRowIndex, height_ - 1) % (aggregationWindowRadius_ * 2 + 2);
+			unsigned short* addRowAggregatedCost = rowAggregatedCost_ + width_ * disparityTotal_ * addRowAggregatedCostIndex;
+			
+			if(addRowIndex < height_)
+			{
+				calcPixelwiseSAD(leftSobelRow, rightSobelRow);
+				addPixelwiseHamming(leftCensusRow, rightCensusRow);
+				memset(addRowAggregatedCost, 0, disparityTotal_*sizeof(unsigned short));
+				
+				for (int x = 0; x <= aggregationWindowRadius_; ++x)
+				{
+					int scale = x == 0 ? aggregationWindowRadius_ + 1 : 1;
+					for (int d = 0; d < disparityTotal_; ++d)
+					{
+						addRowAggregatedCost[d] += static_cast<unsigned short>(pixelwiseCostRow_[disparityTotal_*x + d] * scale);
+					}
+				}
+				
+				int subRowAggregatedCostIndex = std::max(y - aggregationWindowRadius_ - 1, 0) % (aggregationWindowRadius_ * 2 + 2);
+				const unsigned short* subRowAggregatedCost = rowAggregatedCost_ + width_*disparityTotal_*subRowAggregatedCostIndex;
+				const unsigned short* previousCostRow = costImageRow - widthStepCost;
+				
+				for (int x = 1; x < width_; ++x)
+				{
+					const unsigned char* addPixelwiseCost = pixelwiseCostRow_ + std::min((x + aggregationWindowRadius_)*disparityTotal_, (width_ - 1)*disparityTotal_);
+					const unsigned char* subPixelwiseCost = pixelwiseCostRow_ + std::max((x - aggregationWindowRadius_ - 1)*disparityTotal_, 0);
+					for (int d = 0; d < disparityTotal_; d ++)
+					{
+						int registerAddPixelwise = addPixelwiseCost[d];
+						int registerSubPixelwise = subPixelwiseCost[d];
+						
+						int registerAddAggregated = addRowAggregatedCost[disparityTotal_*(x - 1) + d];
+						registerAddAggregated = registerAddAggregated - registerSubPixelwise;
+						registerAddAggregated = registerAddAggregated + registerAddPixelwise;
+						int registerCost = previousCostRow[disparityTotal_*x + d];
+						registerCost = registerCost  - subRowAggregatedCost[disparityTotal_*x + d];
+						registerCost = registerCost + registerAddAggregated;
+						
+						addRowAggregatedCost[disparityTotal_*x + d] = registerAddAggregated;
+						costImageRow[disparityTotal_*x + d] = registerCost;						
+					}
+				}
+			}
+			
+			leftSobelRow += widthStep_;
+			rightSobelRow += widthStep_;
+			leftCensusRow += width_;
+			rightCensusRow += width_;
+			costImageRow += widthStepCost;
+		}
+	}
