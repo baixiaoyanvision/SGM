@@ -1,0 +1,167 @@
+void SGMStereo::performSGM(unsigned short* costImage, unsigned short* disparityImage)
+{
+	const short costMax = SHRT_MAX;  //用作处理特殊的previousPathCosts值，以及比较每个方向的最小的cost
+	int widthStepCostImage = width_*disparityTotal_;  //y循环中用于增加一行，其实就是一行中x的个数乘以d的个数
+
+	short* costSums = sgmBuffer_;  //指向所有内存的开头处
+	memset(costSums, 0, costSumBufferSize_ * sizeof(short));  //清零，这部分用于存储最终计算得到的S(p,d)， 宽*d*高
+
+	short** pathCosts = new short*[pathRowBufferTotal_];  //指针的指针。pathCosts指向数组[0,1]，数组内容[0]和[1]都是指针类型的数据，即pathCosts[0]是个指针
+	short** pathMinCosts = new short*[pathRowBufferTotal_];
+
+	const int processPassTotal = 2;  //用于最外一层的循环，一次是0,2方向的计算，另一次是4,6方向的计算
+
+	for (int processPassCount = 0; processPassCount < processPassTotal; ++processPassCount)
+	{
+		int startX, endX, stepX;
+		int startY, endY, stepY;
+
+		if (processPassCount == 0)  //从左到右
+		{
+			startX = 0; endX = width_; stepX = 1;
+			startY = 0; endY = height_; stepY = 1;
+		}
+		else  //从右到左
+		{
+			startX = width_ - 1; endX = -1; stepX = -1;
+			startY = height_ - 1; endY = -1; stepY = -1;
+		}
+		for (int i = 0; i < pathRowBufferTotal_; ++i)  //内存分配。分配出4块空间，并全部清零。PS:在pathCosts[1]和pathMinCosts[0]之间其实有8个单位的空缺，没有进行清零操作，在后续计算中也没有用到这块区域。
+		{
+			pathCosts[i] = costSums + costSumBufferSize_ + pathCostBufferSize_*i + pathDisparitySize_ + 8;  
+			memset(pathCosts[i] - pathDisparitySize_ - 8, 0, pathCostBufferSize_*sizeof(short));
+
+			pathMinCosts[i] = costSums + costSumBufferSize_ + pathCostBufferSize_ * pathRowBufferTotal_ + pathMinCostBufferSize_*i + pathTotal_ * 2;
+			memset(pathMinCosts[i] - pathTotal_, 0, pathMinCostBufferSize_*sizeof(short));
+		}
+
+		for (int y = startY; y != endY; y += stepY)  //y循环
+		{
+			unsigned short* pixelCostRow = costImage + widthStepCostImage * y;
+			short* costSumRow = costSums + costSumBufferRowSize_*y;
+//每循环一次，以下清零步骤进行一次。因为每循环一次y，就要从某一行的第一个x处开始计算，第一个x的前一个像素是不存在的，所以需要清零处理
+			memset(pathCosts[0] - pathDisparitySize_ - 8, 0, pathDisparitySize_*sizeof(short));
+			memset(pathCosts[0] + width_ * pathDisparitySize_ - 8, 0, pathDisparitySize_*sizeof(short));
+
+			memset(pathMinCosts[0] - pathTotal_, 0, pathTotal_*sizeof(short));
+			memset(pathMinCosts[0] + width_ * pathTotal_, 0, pathTotal_*sizeof(short));
+
+			for (int x = startX; x != endX; x += stepX)  //x循环
+			{
+				int pathMinX = x * pathTotal_;  //每个方向上最小cost的索引，仅用于读取和保存
+				int pathX = pathMinX * disparityTotal_;  // path cost索引值
+
+				//0方向和2方向上的最小cost值，应该是从所有的256个disparity中选择的，只用于计算Lr(p,d)的两个min
+				int previousPathMin0 = pathMinCosts[0][pathMinX - stepX * pathTotal_] + smoothnessPenaltyLarge_;
+				int previousPathMin2 = pathMinCosts[1][pathMinX + 2] + smoothnessPenaltyLarge_;  
+
+				short* previousPathCosts0 = pathCosts[0] + pathX - stepX * pathDisparitySize_;  //当前x的前一个像素
+				short* previousPathCosts2 = pathCosts[1] + pathX + disparityTotal_ * 2;  //上一行中与x重合的像素
+
+				//第一个和最后一个元素设置为 costMax
+				previousPathCosts0[-1] = previousPathCosts0[disparityTotal_] = costMax;
+				previousPathCosts2[-1] = previousPathCosts2[disparityTotal_] = costMax;
+
+				short* pathCostCurrent = pathCosts[0] + pathX;  //pathX=x*8*d，保存每个x的每个方向上，不同d层面的cost值 
+				const unsigned short* pixelCostCurrent = pixelCostRow + disparityTotal_ * x;  //代价计算步骤中计算得到的cost
+				short* costSumCurrent = costSumRow + disparityTotal_*x;  //用于保存最终的cost值
+
+				//用于比较某一方向上所有视差中的最小的cost
+				int regMin0 = costMax;  
+				int regMin2 = costMax;
+
+				for (int d = 0; d < disparityTotal_; d++)
+				{
+					int regPixelCost = pixelCostCurrent[d];  //当前像素的cost值
+					int regPathCost0 = previousPathCosts0[d];  //同一个视差下的前一个像素
+					int regPathCost2 = previousPathCosts2[d];  //同一个视差下的上一行的对应像素
+
+					//以下是计算0方向上的Lr(p-r, d);
+					regPathCost0 = std::min(regPathCost0, (previousPathCosts0[d - 1] + smoothnessPenaltySmall_));
+					regPathCost0 = std::min(regPathCost0, (previousPathCosts0[d + 1] + smoothnessPenaltySmall_));
+					regPathCost0 = std::min(regPathCost0, previousPathMin0);
+					regPathCost0 -= previousPathMin0;
+					regPathCost0 += regPixelCost;
+
+					//以下是计算2方向上的Lr(p-r, d);
+					regPathCost2 = std::min(regPathCost2, (previousPathCosts2[d - 1] + smoothnessPenaltySmall_));
+					regPathCost2 = std::min(regPathCost2, (previousPathCosts2[d + 1] + smoothnessPenaltySmall_));
+					regPathCost2 = std::min(regPathCost2, previousPathMin2);
+					regPathCost2 -= previousPathMin2;
+					regPathCost2 += regPixelCost;
+
+					//累加各个方向上计算得到的Lr，最终得到S(p,d)
+					int costSum = costSumCurrent[d];
+					costSum += regPathCost0;
+					costSum += regPathCost2;
+
+					//数据的存储，用于后续的计算
+					pathCostCurrent[d] = regPathCost0;
+					pathCostCurrent[d + disparityTotal_ * 2] = regPathCost2;
+					costSumCurrent[d] = costSum;
+
+					//分别比较0方向和2方向上，所有视差中最小的cost，作为新的pathMinCosts，用于后续计算
+					if (regPathCost0 < regMin0)
+						regMin0 = regPathCost0;
+					if (regPathCost2 < regMin2)
+						regMin2 = regPathCost2;
+				}
+
+				//d循环一次，每个方向得到一个最小的cost，并存储
+				pathMinCosts[0][pathMinX] = regMin0;
+				pathMinCosts[0][pathMinX + 2] = regMin2;
+			}
+
+			if (processPassCount == processPassTotal - 1)  //只有当第2次循环以后才会进行，WTA步骤以及半像素视差估计
+			{
+				unsigned short* disparityRow = disparityImage + width_ * y;
+				for (int x = 0; x < width_; x++)
+				{
+					short* costSumCurrent = costSumRow + disparityTotal_ * x;
+
+					int bestCost = costSumCurrent[0];
+					int bestDisparity = 0;
+
+					for (int d = 1; d < disparityTotal_; d++)
+					{
+						if (costSumCurrent[d] < bestCost)
+						{
+							bestCost = costSumCurrent[d];
+							bestDisparity = d;
+						}
+					}
+
+					if (bestDisparity > 0 && bestDisparity < disparityTotal_ - 1)
+					{
+						int centerCostValue = costSumCurrent[bestDisparity];
+						int leftCostValue = costSumCurrent[bestDisparity - 1];
+						int rightCostValue = costSumCurrent[bestDisparity + 1];
+
+						if (rightCostValue < leftCostValue)
+						{
+							bestDisparity = static_cast<int>(bestDisparity * disparityFactor_ + static_cast<double>(rightCostValue - leftCostValue) / (centerCostValue - leftCostValue) / 2.0 * disparityFactor_ + 0.5);
+						}
+						else
+						{
+							bestDisparity = static_cast<int>(bestDisparity * disparityFactor_ + static_cast<double>(rightCostValue - leftCostValue) / (centerCostValue - rightCostValue) / 2.0 * disparityFactor_ + 0.5);
+						}
+					}
+					else
+					{
+						bestDisparity = static_cast<int>(bestDisparity * disparityFactor_);
+					}
+
+					disparityRow[x] = static_cast<unsigned short>(bestDisparity);
+				}
+			}
+			//缓冲区交换的原因：因为[1]表示的是上一行的信息，所以x每循环一次（即计算完一行），就要交换一次，把得到的结果复制到[1]中，计算下一行时作为上一行的信息。
+			std::swap(pathCosts[0], pathCosts[1]);
+			std::swap(pathMinCosts[0], pathMinCosts[1]);
+		}
+	}
+	delete[] pathCosts;
+	delete[] pathMinCosts;
+
+	//斑点滤波，这个还没看
+	speckleFilter(100, static_cast<int>(2 * disparityFactor_), disparityImage);
+}
