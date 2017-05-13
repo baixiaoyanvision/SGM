@@ -1,0 +1,92 @@
+//输入：100, static_cast<int>(2 * disparityFactor_), disparityImage
+//输出：经过滤波以后的disparityImage
+void SGMStereo::speckleFilter(const int maxSpeckleSize, const int maxDifference, unsigned short* image) const
+{
+	std::vector<int> labels(width_*height_, 0);
+	std::vector<bool> regionTypes(1);
+	regionTypes[0] = false;
+
+	int currentLabelIndex = 0;
+
+	/* 高度方向的循环 */
+	for (int y = 0; y < height_; ++y)
+	{
+		/* 宽度方向的循环 */
+		for (int x = 0; x < width_; ++x)
+		{
+			int pixelIndex = width_*y + x;
+
+			if (image[width_*y + x] != 0)
+			{
+				if (labels[pixelIndex] > 0)
+				{
+					if (regionTypes[labels[pixelIndex]])
+					{
+						image[width_*y + x] = 0;
+					}
+				}
+				else
+				{
+					std::stack<int> wavefrontIndices;
+					wavefrontIndices.push(pixelIndex);
+					++currentLabelIndex;
+					regionTypes.push_back(false);
+					int regionPixelTotal = 0;
+					labels[pixelIndex] = currentLabelIndex;
+
+					while (!wavefrontIndices.empty())
+					{
+						int currentPixelIndex = wavefrontIndices.top();
+						wavefrontIndices.pop();
+						int currentX = currentPixelIndex%width_;
+						int currentY = currentPixelIndex / width_;
+						++regionPixelTotal;
+						unsigned short pixelValue = image[width_*currentY + currentX];
+
+						/* 右 */
+						if (currentX < width_ - 1 && labels[currentPixelIndex + 1] == 0
+							&& image[width_*currentY + currentX + 1] != 0
+							&& std::abs(pixelValue - image[width_*currentY + currentX + 1]) <= maxDifference)
+						{
+							labels[currentPixelIndex + 1] = currentLabelIndex;
+							wavefrontIndices.push(currentPixelIndex + 1);
+						}
+
+						/* 左 */
+						if (currentX > 0 && labels[currentPixelIndex - 1] == 0
+							&& image[width_*currentY + currentX - 1] != 0
+							&& std::abs(pixelValue - image[width_*currentY + currentX - 1]) <= maxDifference)
+						{
+							labels[currentPixelIndex - 1] = currentLabelIndex;
+							wavefrontIndices.push(currentPixelIndex - 1);
+						}
+
+						/* 下 */
+						if (currentY < height_ - 1 && labels[currentPixelIndex + width_] == 0
+							&& image[width_*(currentY + 1) + currentX] != 0
+							&& std::abs(pixelValue - image[width_*(currentY + 1) + currentX]) <= maxDifference)
+						{
+							labels[currentPixelIndex + width_] = currentLabelIndex;
+							wavefrontIndices.push(currentPixelIndex + width_);
+						}
+
+						/* 上 */
+						if (currentY > 0 && labels[currentPixelIndex - width_] == 0
+							&& image[width_*(currentY - 1) + currentX] != 0
+							&& std::abs(pixelValue - image[width_*(currentY - 1) + currentX]) <= maxDifference)
+						{
+							labels[currentPixelIndex - width_] = currentLabelIndex;
+							wavefrontIndices.push(currentPixelIndex - width_);
+						}
+					}
+
+					if (regionPixelTotal <= maxSpeckleSize)
+					{
+						regionTypes[currentLabelIndex] = true;
+						image[width_*y + x] = 0;
+					}
+				}
+			} // if (image[width_*y + x] != 0)
+		} // for (int x = 0; x < width_; ++x)
+	} // for (int y = 0; y < height_; ++y)
+}
