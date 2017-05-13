@@ -1,0 +1,52 @@
+//输入：左右图census变换图像的指针：leftCensusRow, rightCensusRow
+//输出：计算结果都保存在 pixelwiseCostRow_ 中，与SAD值相加
+void SGMStereo::addPixelwiseHamming(const int* leftCensusRow, const int* rightCensusRow)
+{
+	for (int x = 0; x < disparityTotal_; x++)
+	{
+		int leftCensusCode = leftCensusRow[x];
+		int hammingDistance = 0;
+		int hamming = 0;
+		for (int d = 0; d <= x; d++)
+		{
+			int distance = 0;
+			hamming = leftCensusCode^rightCensusRow[x - d];
+			for (int i = 0; i <width_; i++)
+			{
+				 
+				int hammingD = hamming % 2;
+				if (hammingD == 1)
+					distance++;
+				hamming = hamming / 2;
+			}
+			hammingDistance = distance*censusWeightFactor_;
+			pixelwiseCostRow_[disparityTotal_*x + d] += hammingDistance;
+		}
+		for (int d = x + 1; d < disparityTotal_; ++d)
+		{
+			pixelwiseCostRow_[disparityTotal_*x + d] += hammingDistance;
+		}
+	}
+
+	for (int x = disparityTotal_; x < width_; x++)
+	{
+		int leftCensusCode = leftCensusRow[x];
+		int hammingDistance = 0;
+		int hamming = 0;
+		for (int d = 0; d < disparityTotal_; d++)
+		{
+			int distance = 0;
+			hamming = leftCensusCode^rightCensusRow[x - d];
+			for (int i = 0; i < width_; i++)
+			{
+				int hammingD = hamming % 2;
+				if (hammingD == 1)
+					distance++;
+				hamming = hamming / 2;
+			}
+			hammingDistance = distance*censusWeightFactor_;
+			pixelwiseCostRow_[disparityTotal_*x + d] += hammingDistance;
+		}
+	}
+
+}
